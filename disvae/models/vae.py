@@ -9,10 +9,10 @@ from disvae.utils.initialization import weights_init
 from .encoders import get_encoder
 from .decoders import get_decoder
 
-MODELS = ["Burgess"]
+MODELS = ["Burgess", "FC"]
 
 
-def init_specific_model(model_type, img_size, latent_dim):
+def init_specific_model(model_type, input_size, latent_dim):
     """Return an instance of a VAE with encoder and decoder from `model_type`."""
     model_type = model_type.lower().capitalize()
     if model_type not in MODELS:
@@ -21,7 +21,7 @@ def init_specific_model(model_type, img_size, latent_dim):
 
     encoder = get_encoder(model_type)
     decoder = get_decoder(model_type)
-    model = VAE(img_size, encoder, decoder, latent_dim)
+    model = VAE(input_size, encoder, decoder, latent_dim)
     model.model_type = model_type  # store to help reloading
     return model
 
@@ -38,15 +38,15 @@ class VAE(nn.Module):
         """
         super(VAE, self).__init__()
 
-        if list(img_size[1:]) not in [[32, 32], [64, 64]]:
-            raise RuntimeError("{} sized images not supported. Only (None, 32, 32) and (None, 64, 64) supported. Build your own architecture or reshape images!".format(img_size))
+        #if list(img_size[1:]) not in [[32, 32], [64, 64]]:
+        #    raise RuntimeError("{} sized images not supported. Only (None, 32, 32) and (None, 64, 64) supported. Build your own architecture or reshape images!".format(img_size))
 
         self.latent_dim = latent_dim
         self.img_size = img_size
         self.num_pixels = self.img_size[1] * self.img_size[2]
         self.encoder = encoder(img_size, self.latent_dim)
         self.decoder = decoder(img_size, self.latent_dim)
-
+        
         self.reset_parameters()
 
     def reparameterize(self, mean, logvar):

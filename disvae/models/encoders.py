@@ -46,7 +46,8 @@ class EncoderBurgess(nn.Module):
         self.latent_dim = latent_dim
         self.img_size = img_size
         # Shape required to start transpose convs
-        self.reshape = (hid_channels, kernel_size, kernel_size)
+        assert len(img_size) == 3, 'CHW'
+        self.reshape = (hid_channels, img_size[1]//(2**6), img_size[2]//(2**6))
         n_chan = self.img_size[0]
 
         # Convolutional layers
@@ -54,11 +55,10 @@ class EncoderBurgess(nn.Module):
         self.conv1 = nn.Conv2d(n_chan, hid_channels, kernel_size, **cnn_kwargs)
         self.conv2 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
         self.conv3 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-
-        # If input image is 64x64 do fourth convolution
-        if self.img_size[1] == self.img_size[2] == 64:
-            self.conv_64 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-
+        self.conv4 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
+        self.conv5 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
+        self.conv6 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
+        
         # Fully connected layers
         self.lin1 = nn.Linear(np.product(self.reshape), hidden_dim)
         self.lin2 = nn.Linear(hidden_dim, hidden_dim)
@@ -73,13 +73,39 @@ class EncoderBurgess(nn.Module):
         x = torch.relu(self.conv1(x))
         x = torch.relu(self.conv2(x))
         x = torch.relu(self.conv3(x))
-        if self.img_size[1] == self.img_size[2] == 64:
-            x = torch.relu(self.conv_64(x))
-
+        x = torch.relu(self.conv4(x))
+        x = torch.relu(self.conv5(x))
+        x = torch.relu(self.conv6(x))
+        
         # Fully connected layers with ReLu activations
         x = x.view((batch_size, -1))
         x = torch.relu(self.lin1(x))
         x = torch.relu(self.lin2(x))
+
+        # Fully connected layer for log variance and mean
+        # Log std-dev in paper (bear in mind)
+        mu_logvar = self.mu_logvar_gen(x)
+        mu, logvar = mu_logvar.view(-1, self.latent_dim, 2).unbind(-1)
+
+        return mu, logvar
+    
+class EncoderFC(nn.Module):
+    def __init__(self, input_dim, latent_dim=10, hidden_dim=256):
+        super(EncoderFC, self).__init__()
+
+        # Layer parameters
+        self.hidden_dim = hidden_dim
+        self.latent_dim = latent_dim
+        self.input_dim = input_dim
+
+        # Fully connected layers
+        self.lin1 = nn.Linear(self.input_dim, hidden_dim)
+
+        # Fully connected layers for mean and variance
+        self.mu_logvar_gen = nn.Linear(hidden_dim, self.latent_dim * 2)
+
+    def forward(self, x):
+        x = torch.relu(self.lin1(x))
 
         # Fully connected layer for log variance and mean
         # Log std-dev in paper (bear in mind)
