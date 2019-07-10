@@ -86,6 +86,7 @@ class VAEConv2D(VAE, nn.Module):
         """
         super().__init__()
 
+        self.model_type = 'Conv2D'
         self.img_size = self.input_size = img_size
         self.latent_dim = latent_dim
         self.kernel_size = kernel_size
@@ -124,6 +125,7 @@ class VAEFC(VAE, nn.Module):
     def __init__(self, input_size, latent_dim=10, hidden_dim=256):
         super().__init__()
 
+        self.model_type = 'FC'
         self.input_size = input_size
         self.latent_dim = latent_dim
         self.hidden_dim = hidden_dim

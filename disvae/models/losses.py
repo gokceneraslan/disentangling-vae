@@ -421,8 +421,7 @@ def _reconstruction_loss(data, recon_data, distribution="bernoulli", storer=None
         Per image cross entropy (i.e. normalized per batch but not pixel and
         channel)
     """
-    batch_size, n_chan, height, width = recon_data.size()
-    is_colored = n_chan == 3
+    batch_size = recon_data.size()[0]
 
     if distribution == "bernoulli":
         loss = F.binary_cross_entropy(recon_data, data, reduction="sum")
