@@ -327,6 +327,7 @@ class Visualizer():
 
         filename = os.path.join(self.model_dir, PLOT_NAMES["reconstruct_traverse"])
         concatenated.save(filename)
+        return concatenated
 
     def gif_traversals(self, data, n_latents=None, n_per_gif=15):
         """Generates a grid of gifs of latent posterior traversals where the rows
