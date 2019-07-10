@@ -6,16 +6,8 @@ import numpy as np
 import torch
 from torch import nn
 
-
-# ALL encoders should be called Enccoder<Model>
-def get_encoder(model_type):
-    model_type = model_type.lower().capitalize()
-    return eval("Encoder{}".format(model_type))
-
-
-class EncoderBurgess(nn.Module):
-    def __init__(self, img_size,
-                 latent_dim=10):
+class EncoderConv2D(nn.Module):
+    def __init__(self, img_size, latent_dim=10, kernel_size=4, stride=2, padding=1, hidden_dim=256, hidden_channels=32):
         r"""Encoder of the model proposed in [1].
 
         Parameters
@@ -37,34 +29,39 @@ class EncoderBurgess(nn.Module):
             [1] Burgess, Christopher P., et al. "Understanding disentangling in
             $\beta$-VAE." arXiv preprint arXiv:1804.03599 (2018).
         """
-        super(EncoderBurgess, self).__init__()
+        super(EncoderConv2D, self).__init__()
 
         # Layer parameters
-        hid_channels = 32
-        kernel_size = 4
-        hidden_dim = 256
+        self.hidden_channels = hidden_channels
+        self.kernel_size = kernel_size
+        self.hidden_dim = hidden_dim
         self.latent_dim = latent_dim
         self.img_size = img_size
+
         # Shape required to start transpose convs
-        assert len(img_size) == 3, 'CHW'
-        self.reshape = (hid_channels, img_size[1]//(2**6), img_size[2]//(2**6))
+        assert len(img_size) == 3, 'img_size must be in CHW layout'
+        
+        # TODO: make number of conv layers more parameteric
+        
+        # calculate the image size after convolutions
+        self.reshape = (self.hidden_channels, img_size[1]//(2**6), img_size[2]//(2**6))
         n_chan = self.img_size[0]
 
         # Convolutional layers
-        cnn_kwargs = dict(stride=2, padding=1)
-        self.conv1 = nn.Conv2d(n_chan, hid_channels, kernel_size, **cnn_kwargs)
-        self.conv2 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.conv3 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.conv4 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.conv5 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.conv6 = nn.Conv2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        
+        cnn_kwargs = dict(stride=stride, padding=padding)
+        self.conv1 = nn.Conv2d(n_chan, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.conv2 = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.conv3 = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.conv4 = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.conv5 = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.conv6 = nn.Conv2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+
         # Fully connected layers
-        self.lin1 = nn.Linear(np.product(self.reshape), hidden_dim)
-        self.lin2 = nn.Linear(hidden_dim, hidden_dim)
+        self.lin1 = nn.Linear(np.product(self.reshape), self.hidden_dim)
+        self.lin2 = nn.Linear(self.hidden_dim, self.hidden_dim)
 
         # Fully connected layers for mean and variance
-        self.mu_logvar_gen = nn.Linear(hidden_dim, self.latent_dim * 2)
+        self.mu_logvar_gen = nn.Linear(self.hidden_dim, self.latent_dim * 2)
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -88,7 +85,8 @@ class EncoderBurgess(nn.Module):
         mu, logvar = mu_logvar.view(-1, self.latent_dim, 2).unbind(-1)
 
         return mu, logvar
-    
+
+
 class EncoderFC(nn.Module):
     def __init__(self, input_dim, latent_dim=10, hidden_dim=256):
         super(EncoderFC, self).__init__()
@@ -99,10 +97,10 @@ class EncoderFC(nn.Module):
         self.input_dim = input_dim
 
         # Fully connected layers
-        self.lin1 = nn.Linear(self.input_dim, hidden_dim)
+        self.lin1 = nn.Linear(self.input_dim, self.hidden_dim)
 
         # Fully connected layers for mean and variance
-        self.mu_logvar_gen = nn.Linear(hidden_dim, self.latent_dim * 2)
+        self.mu_logvar_gen = nn.Linear(self.hidden_dim, self.latent_dim * 2)
 
     def forward(self, x):
         x = torch.relu(self.lin1(x))

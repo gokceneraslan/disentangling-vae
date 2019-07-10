@@ -5,7 +5,6 @@ import re
 import numpy as np
 import torch
 
-from disvae import init_specific_model
 
 MODEL_FILENAME = "model.pt"
 META_FILENAME = "specs.json"
@@ -31,7 +30,8 @@ def save_model(model, directory, metadata=None, filename=MODEL_FILENAME):
 
     if metadata is None:
         # save the minimum required for loading
-        metadata = dict(img_size=model.img_size, latent_dim=model.latent_dim,
+        metadata = dict(img_size=model.img_size, 
+                        latent_dim=model.latent_dim,
                         model_type=model.model_type)
 
     save_metadata(metadata, directory)

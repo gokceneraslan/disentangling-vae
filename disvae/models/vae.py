@@ -1,54 +1,27 @@
 """
 Module containing the main VAE class.
 """
+
+from abc import ABC, abstractmethod, abstractproperty
+
 import torch
 from torch import nn, optim
 from torch.nn import functional as F
 
 from disvae.utils.initialization import weights_init
-from .encoders import get_encoder
-from .decoders import get_decoder
-
-MODELS = ["Burgess", "FC"]
+from .encoders import EncoderConv2D, EncoderFC
+from .decoders import DecoderConv2D, DecoderFC
 
 
-def init_specific_model(model_type, input_size, latent_dim):
-    """Return an instance of a VAE with encoder and decoder from `model_type`."""
-    model_type = model_type.lower().capitalize()
-    if model_type not in MODELS:
-        err = "Unkown model_type={}. Possible values: {}"
-        raise ValueError(err.format(model_type, MODELS))
+class VAE(ABC):
+    @abstractproperty
+    def encoder(self):
+        pass
 
-    encoder = get_encoder(model_type)
-    decoder = get_decoder(model_type)
-    model = VAE(input_size, encoder, decoder, latent_dim)
-    model.model_type = model_type  # store to help reloading
-    return model
-
-
-class VAE(nn.Module):
-    def __init__(self, img_size, encoder, decoder, latent_dim):
-        """
-        Class which defines model and forward pass.
-
-        Parameters
-        ----------
-        img_size : tuple of ints
-            Size of images. E.g. (1, 32, 32) or (3, 64, 64).
-        """
-        super(VAE, self).__init__()
-
-        #if list(img_size[1:]) not in [[32, 32], [64, 64]]:
-        #    raise RuntimeError("{} sized images not supported. Only (None, 32, 32) and (None, 64, 64) supported. Build your own architecture or reshape images!".format(img_size))
-
-        self.latent_dim = latent_dim
-        self.img_size = img_size
-        self.num_pixels = self.img_size[1] * self.img_size[2]
-        self.encoder = encoder(img_size, self.latent_dim)
-        self.decoder = decoder(img_size, self.latent_dim)
+    @abstractproperty
+    def decoder(self):
+        pass    
         
-        self.reset_parameters()
-
     def reparameterize(self, mean, logvar):
         """
         Samples from a normal distribution using the reparameterization trick.
@@ -99,3 +72,77 @@ class VAE(nn.Module):
         latent_dist = self.encoder(x)
         latent_sample = self.reparameterize(*latent_dist)
         return latent_sample
+
+
+class VAEConv2D(VAE, nn.Module):
+    def __init__(self, img_size, latent_dim=10, kernel_size=4, stride=2, padding=1, hidden_dim=256, hidden_channels=32):
+        """
+        Class which defines model and forward pass.
+
+        Parameters
+        ----------
+        img_size : tuple of ints
+            Size of images. E.g. (1, 32, 32) or (3, 64, 64).
+        """
+        super().__init__()
+
+        self.img_size = self.input_size = img_size
+        self.latent_dim = latent_dim
+        self.kernel_size = kernel_size
+        self.hidden_dim = hidden_dim
+        self.hidden_channels = hidden_channels
+        
+        self._encoder = EncoderConv2D(img_size,
+                                      latent_dim=latent_dim,
+                                      kernel_size=kernel_size,
+                                      stride=stride,
+                                      padding=padding,
+                                      hidden_dim=hidden_dim, 
+                                      hidden_channels=hidden_channels)
+
+        self._decoder = DecoderConv2D(img_size,
+                                     latent_dim=latent_dim,
+                                     kernel_size=kernel_size,
+                                     stride=stride,
+                                     padding=padding,
+                                     hidden_dim=hidden_dim, 
+                                     hidden_channels=hidden_channels)
+        
+        self.reset_parameters()
+
+        
+    @property
+    def encoder(self):
+        return self._encoder
+
+    @property
+    def decoder(self):
+        return self._decoder
+
+
+class VAEFC(VAE, nn.Module):
+    def __init__(self, input_size, latent_dim=10, hidden_dim=256):
+        super().__init__()
+
+        self.input_size = input_size
+        self.latent_dim = latent_dim
+        self.hidden_dim = hidden_dim
+        
+        self._encoder = EncoderFC(input_size,
+                                  latent_dim=latent_dim,
+                                  hidden_dim=hidden_dim)
+
+        self._decoder = DecoderFC(input_size,
+                                  latent_dim=latent_dim,
+                                  hidden_dim=hidden_dim)
+        
+        self.reset_parameters()
+
+        
+    @property
+    def encoder(self):
+        return self._encoder
+
+    @property
+    def decoder(self):
+        return self._decoder

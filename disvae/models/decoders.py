@@ -7,15 +7,8 @@ import torch
 from torch import nn
 
 
-# ALL decoders should be called Decoder<Model>
-def get_decoder(model_type):
-    model_type = model_type.lower().capitalize()
-    return eval("Decoder{}".format(model_type))
-
-
-class DecoderBurgess(nn.Module):
-    def __init__(self, img_size,
-                 latent_dim=10):
+class DecoderConv2D(nn.Module):
+    def __init__(self, img_size, latent_dim=10, kernel_size=4, stride=2, padding=1, hidden_dim=256, hidden_channels=32):
         r"""Decoder of the model proposed in [1].
 
         Parameters
@@ -37,31 +30,33 @@ class DecoderBurgess(nn.Module):
             [1] Burgess, Christopher P., et al. "Understanding disentangling in
             $\beta$-VAE." arXiv preprint arXiv:1804.03599 (2018).
         """
-        super(DecoderBurgess, self).__init__()
+        super(DecoderConv2D, self).__init__()
 
         # Layer parameters
-        hid_channels = 32
-        kernel_size = 4
-        hidden_dim = 256
+        self.hidden_channels = hidden_channels
+        self.kernel_size = kernel_size
+        self.hidden_dim = hidden_dim
+        self.latent_dim = latent_dim
+        
         self.img_size = img_size
         # Shape required to start transpose convs
-        self.reshape = (hid_channels, img_size[1]//(2**6), img_size[2]//(2**6))
+        self.reshape = (self.hidden_channels, img_size[1]//(2**6), img_size[2]//(2**6))
         n_chan = self.img_size[0]
         self.img_size = img_size
 
         # Fully connected layers
-        self.lin1 = nn.Linear(latent_dim, hidden_dim)
-        self.lin2 = nn.Linear(hidden_dim, hidden_dim)
-        self.lin3 = nn.Linear(hidden_dim, np.product(self.reshape))
+        self.lin1 = nn.Linear(self.latent_dim, self.hidden_dim)
+        self.lin2 = nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.lin3 = nn.Linear(self.hidden_dim, np.product(self.reshape))
 
         # Convolutional layers
-        cnn_kwargs = dict(stride=2, padding=1)
-        self.convTpre1 = nn.ConvTranspose2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.convTpre2 = nn.ConvTranspose2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.convTpre3 = nn.ConvTranspose2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.convT1 = nn.ConvTranspose2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.convT2 = nn.ConvTranspose2d(hid_channels, hid_channels, kernel_size, **cnn_kwargs)
-        self.convT3 = nn.ConvTranspose2d(hid_channels, n_chan, kernel_size, **cnn_kwargs)
+        cnn_kwargs = dict(stride=stride, padding=padding)
+        self.convTpre1 = nn.ConvTranspose2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.convTpre2 = nn.ConvTranspose2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.convTpre3 = nn.ConvTranspose2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.convT1 = nn.ConvTranspose2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.convT2 = nn.ConvTranspose2d(self.hidden_channels, self.hidden_channels, self.kernel_size, **cnn_kwargs)
+        self.convT3 = nn.ConvTranspose2d(self.hidden_channels, n_chan, self.kernel_size, **cnn_kwargs)
 
     def forward(self, z):
         batch_size = z.size(0)
