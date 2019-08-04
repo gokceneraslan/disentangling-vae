@@ -75,7 +75,7 @@ class VAE(ABC):
 
 
 class VAEConv2D(VAE, nn.Module):
-    def __init__(self, img_size, latent_dim=10, kernel_size=4, stride=2, padding=1, hidden_dim=256, hidden_channels=32):
+    def __init__(self, img_size, latent_dim=10, kernel_size=4, num_layers=6, stride=2, padding=1, hidden_dim=256, hidden_channels=32):
         """
         Class which defines model and forward pass.
 
@@ -92,10 +92,12 @@ class VAEConv2D(VAE, nn.Module):
         self.kernel_size = kernel_size
         self.hidden_dim = hidden_dim
         self.hidden_channels = hidden_channels
+        self.num_layers = num_layers
         
         self._encoder = EncoderConv2D(img_size,
                                       latent_dim=latent_dim,
                                       kernel_size=kernel_size,
+                                      num_layers=num_layers,
                                       stride=stride,
                                       padding=padding,
                                       hidden_dim=hidden_dim, 
@@ -104,6 +106,7 @@ class VAEConv2D(VAE, nn.Module):
         self._decoder = DecoderConv2D(img_size,
                                      latent_dim=latent_dim,
                                      kernel_size=kernel_size,
+                                     num_layers=num_layers,
                                      stride=stride,
                                      padding=padding,
                                      hidden_dim=hidden_dim, 
@@ -122,7 +125,7 @@ class VAEConv2D(VAE, nn.Module):
 
 
 class VAEFC(VAE, nn.Module):
-    def __init__(self, input_size, latent_dim=10, hidden_dim=256):
+    def __init__(self, input_size, latent_dim=10, hidden_dim=256, output_activation='linear'):
         super().__init__()
 
         self.model_type = 'FC'
@@ -136,7 +139,8 @@ class VAEFC(VAE, nn.Module):
 
         self._decoder = DecoderFC(input_size,
                                   latent_dim=latent_dim,
-                                  hidden_dim=hidden_dim)
+                                  hidden_dim=hidden_dim,
+                                  output_activation=output_activation)
         
         self.reset_parameters()
 
