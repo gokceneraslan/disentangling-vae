@@ -30,7 +30,7 @@ class DecoderConv2D(nn.Module):
             [1] Burgess, Christopher P., et al. "Understanding disentangling in
             $\beta$-VAE." arXiv preprint arXiv:1804.03599 (2018).
         """
-        super(DecoderConv2D, self).__init__()
+        super().__init__()
 
         # Layer parameters
         self.hidden_channels = hidden_channels
@@ -77,8 +77,9 @@ class DecoderConv2D(nn.Module):
                 x = torch.sigmoid(convt_layer(x))
         return x
 
+
 class CondDecoderConv2D(nn.Module):
-    def __init__(self, img_size, latent_dim=10, kernel_size=4, num_layers=6, stride=2, padding=1, hidden_dim=256, hidden_channels=32):
+    def __init__(self, img_size, cond_dim, latent_dim=10, kernel_size=4, num_layers=6, stride=2, padding=1, hidden_dim=256, hidden_channels=32):
         r"""Decoder of the model proposed in [1].
 
         Parameters
@@ -100,12 +101,13 @@ class CondDecoderConv2D(nn.Module):
             [1] Burgess, Christopher P., et al. "Understanding disentangling in
             $\beta$-VAE." arXiv preprint arXiv:1804.03599 (2018).
         """
-        super(DecoderConv2D, self).__init__()
+        super().__init__()
 
         # Layer parameters
         self.hidden_channels = hidden_channels
         self.kernel_size = kernel_size
         self.hidden_dim = hidden_dim
+        self.cond_dim = cond_dim
         self.latent_dim = latent_dim
         self.num_layers = num_layers
         
@@ -116,7 +118,7 @@ class CondDecoderConv2D(nn.Module):
         self.img_size = img_size
 
         # Fully connected layers
-        self.lin1 = nn.Linear(self.latent_dim, self.hidden_dim)
+        self.lin1 = nn.Linear(self.latent_dim + self.cond_dim, self.hidden_dim)
         self.lin2 = nn.Linear(self.hidden_dim, self.hidden_dim)
         self.lin3 = nn.Linear(self.hidden_dim, np.product(self.reshape))
 
@@ -129,11 +131,11 @@ class CondDecoderConv2D(nn.Module):
             convt_layer = nn.ConvTranspose2d(self.hidden_channels, target_channels, self.kernel_size, **cnn_kwargs)
             self.convt_layers.append(convt_layer)
 
-    def forward(self, z):
+    def forward(self, *, z, y):
         batch_size = z.size(0)
 
         # Fully connected layers with ReLu activations
-        x = torch.relu(self.lin1(z))
+        x = torch.relu(self.lin1(torch.cat([z, y], dim=-1)))
         x = torch.relu(self.lin2(x))
         x = torch.relu(self.lin3(x))
         x = x.view(batch_size, *self.reshape)
@@ -174,7 +176,7 @@ class DecoderFC(nn.Module):
     
 class CondDecoderFC(nn.Module):
     def __init__(self, output_dim, cond_dim, latent_dim=10, hidden_dim=256, output_activation='linear'):
-        super(DecoderFC, self).__init__()
+        super().__init__()
 
         self.output_activation = output_activation
         # Layer parameters
@@ -186,9 +188,9 @@ class CondDecoderFC(nn.Module):
         self.lin1 = nn.Linear(latent_dim + cond_dim, hidden_dim)
         self.lin2 = nn.Linear(hidden_dim, self.output_dim)
 
-    def forward(self, z, y, *):
+    def forward(self, *, z, y):
         # Fully connected layers with ReLu activations
-        x = torch.relu(self.lin1(torch.cat([z, y], axis=-1))
+        x = torch.relu(self.lin1(torch.cat([z, y], dim=-1)))
         x = torch.relu(self.lin2(x))
 
         if self.output_activation == 'sigmoid':

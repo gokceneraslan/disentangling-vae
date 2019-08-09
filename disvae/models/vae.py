@@ -116,7 +116,7 @@ class CondVAE(ABC):
         """
         latent_dist = self.encoder(x)
         latent_sample = self.reparameterize(*latent_dist)
-        reconstruct = self.decoder(latent_sample, y)
+        reconstruct = self.decoder(z=latent_sample, y=y)
         return reconstruct, latent_dist, latent_sample
 
     def reset_parameters(self):

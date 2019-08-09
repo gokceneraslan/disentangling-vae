@@ -97,7 +97,7 @@ def load_model(directory, is_gpu=True, filename=MODEL_FILENAME):
                           else "cpu")
 
     path_to_model = os.path.join(directory, filename)
-    model = pickle.load(open(os.path.join(directory, filename + '.pkl'), 'rb'))
+    model = pickle.load(open(os.path.join(directory, filename), 'rb'))
     model.load_state_dict(torch.load(path_to_model))
     model.eval()
 
