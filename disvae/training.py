@@ -26,6 +26,10 @@ class Trainer():
 
     loss_f: disvae.models.BaseLoss
         Loss function.
+        
+    conditional:
+        Specifies whether to use y in the DataLoaders
+        for conditioning
 
     device: torch.device, optional
         Device on which to run the code.
@@ -44,6 +48,7 @@ class Trainer():
     """
 
     def __init__(self, model, optimizer, loss_f,
+                 conditional=False,
                  device=torch.device("cpu"),
                  logger=logging.getLogger(__name__),
                  save_dir="results",
@@ -52,6 +57,7 @@ class Trainer():
 
         self.device = device
         self.model = model.to(self.device)
+        self.conditional = conditional
         self.loss_f = loss_f
         self.optimizer = optimizer
         self.save_dir = save_dir
@@ -124,7 +130,7 @@ class Trainer():
         kwargs = dict(desc="Epoch {}".format(epoch + 1), leave=False,
                       disable=not self.is_progress_bar)
         with trange(len(data_loader), **kwargs) as t:
-            for _, (data, _) in enumerate(data_loader):
+            for _, data in enumerate(data_loader):
                 iter_loss = self._train_iteration(data, storer)
                 epoch_loss += iter_loss
 
@@ -146,10 +152,17 @@ class Trainer():
         storer: dict
             Dictionary in which to store important variables for vizualisation.
         """
+        data, y = data
         data = data.to(self.device)
+        if self.conditional:
+            y = y.to(self.device)
 
         try:
-            recon_batch, latent_dist, latent_sample = self.model(data)
+            if self.conditional:
+                recon_batch, latent_dist, latent_sample = self.model(data, y)
+            else:
+                recon_batch, latent_dist, latent_sample = self.model(data)
+
             loss = self.loss_f(data, recon_batch, latent_dist, self.model.training,
                                storer, latent_sample=latent_sample)
             self.optimizer.zero_grad()
