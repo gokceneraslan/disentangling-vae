@@ -87,22 +87,26 @@ class EncoderConv2D(nn.Module):
 
 
 class EncoderFC(nn.Module):
-    def __init__(self, input_dim, latent_dim=10, hidden_dim=256):
+    def __init__(self, input_dim, latent_dim=10, hidden_dim=256, num_layers=1):
         super(EncoderFC, self).__init__()
 
         # Layer parameters
         self.hidden_dim = hidden_dim
         self.latent_dim = latent_dim
         self.input_dim = input_dim
+        self.num_layers = num_layers
+        self.fc_layers = nn.ModuleList()
 
         # Fully connected layers
-        self.lin1 = nn.Linear(self.input_dim, self.hidden_dim)
+        for i in range(num_layers):
+            self.fc_layers.append(nn.Linear(self.input_dim if i == 0 else self.hidden_dim, self.hidden_dim))
 
         # Fully connected layers for mean and variance
         self.mu_logvar_gen = nn.Linear(self.hidden_dim, self.latent_dim * 2)
 
     def forward(self, x):
-        x = torch.relu(self.lin1(x))
+        for layer in self.fc_layers:
+            x = torch.relu(layer(x))
 
         # Fully connected layer for log variance and mean
         # Log std-dev in paper (bear in mind)

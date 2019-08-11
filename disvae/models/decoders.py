@@ -151,31 +151,38 @@ class CondDecoderConv2D(nn.Module):
 
 
 class DecoderFC(nn.Module):
-    def __init__(self, output_dim, latent_dim=10, hidden_dim=256, output_activation='linear'):
+    def __init__(self, output_dim, latent_dim=10, hidden_dim=256, num_layers=1, output_activation='linear'):
         super(DecoderFC, self).__init__()
 
         self.output_activation = output_activation
         # Layer parameters
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
+        self.num_layers = num_layers
+        self.fc_layers = nn.ModuleList()
 
         # Fully connected layers
-        self.lin1 = nn.Linear(latent_dim, hidden_dim)
-        self.lin2 = nn.Linear(hidden_dim, self.output_dim)
+        for i in range(num_layers):
+            self.fc_layers.append(nn.Linear(latent_dim if i == 0 else hidden_dim, hidden_dim))
+        self.output_layer = nn.Linear(hidden_dim, self.output_dim)
 
-    def forward(self, z):
+    def forward(self, x):
         # Fully connected layers with ReLu activations
-        x = torch.relu(self.lin1(z))
-        x = torch.relu(self.lin2(x))
+        for layer in self.fc_layers:
+            x = torch.relu(layer(x))
+
+        x = self.output_layer(x)
 
         if self.output_activation == 'sigmoid':
             x = torch.sigmoid(x)
+        elif self.output_activation == 'relu':
+            x = torch.relu(x)
 
         return x
     
     
 class CondDecoderFC(nn.Module):
-    def __init__(self, output_dim, cond_dim, latent_dim=10, hidden_dim=256, output_activation='linear'):
+    def __init__(self, output_dim, cond_dim, latent_dim=10, hidden_dim=256, num_layers=1, output_activation='linear'):
         super().__init__()
 
         self.output_activation = output_activation
@@ -183,18 +190,27 @@ class CondDecoderFC(nn.Module):
         self.hidden_dim = hidden_dim
         self.cond_dim = cond_dim
         self.output_dim = output_dim
+        self.num_layers = num_layers
+        self.fc_layers = nn.ModuleList()
 
         # Fully connected layers
-        self.lin1 = nn.Linear(latent_dim + cond_dim, hidden_dim)
-        self.lin2 = nn.Linear(hidden_dim, self.output_dim)
+        for i in range(num_layers):
+            self.fc_layers.append(nn.Linear(latent_dim + cond_dim if i == 0 else hidden_dim, hidden_dim))
+
+        self.output_layer = nn.Linear(hidden_dim, self.output_dim)
 
     def forward(self, *, z, y):
+        x = torch.cat([z, y], dim=-1)
+        
         # Fully connected layers with ReLu activations
-        x = torch.relu(self.lin1(torch.cat([z, y], dim=-1)))
-        x = torch.relu(self.lin2(x))
+        for layer in self.fc_layers:
+            x = torch.relu(layer(x))
+        
+        x = self.output_layer(x)
 
         if self.output_activation == 'sigmoid':
             x = torch.sigmoid(x)
+        elif self.output_activation == 'relu':
+            x = torch.relu(x)
 
         return x
-
