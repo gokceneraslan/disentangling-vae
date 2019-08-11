@@ -42,7 +42,7 @@ class AnndataDataset(DisentangledDataset):
         self.imgs = self.adata
         self.categorical_vars = categorical_vars
         if self.categorical_vars is not None:
-            self.y = pd.get_dummies(self.adata.obs, 
+            self.y = pd.get_dummies(self.adata.obs[categorical_vars], 
                                     columns=self.categorical_vars).values.squeeze().astype('float32') * scale_factor
 
     def download(self):
