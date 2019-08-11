@@ -41,9 +41,8 @@ class AnndataDataset(DisentangledDataset):
         self.adata = adata
         self.imgs = self.adata
         self.categorical_vars = categorical_vars
-        if self.categorical_vars is not None:
-            self.y = pd.get_dummies(self.adata.obs[categorical_vars], 
-                                    columns=self.categorical_vars).values.squeeze().astype('float32') * scale_factor
+        self.scale_factor = scale_factor
+        self.y = self.get_conditional_vectors()
 
     def download(self):
         pass
@@ -51,6 +50,13 @@ class AnndataDataset(DisentangledDataset):
     def __getitem__(self, idx):
         batch = self.adata.X[idx]
         return batch, 0 if self.categorical_vars is None else self.y[idx]
+    
+    def get_conditional_vectors(self):
+        if self.categorical_vars is not None:
+            return pd.get_dummies(self.adata.obs[self.categorical_vars], 
+                                  columns=self.categorical_vars).values.squeeze().astype('float32') * self.scale_factor
+        else:
+            return None
 
 
 def fit_single_cell(adata, experiment,
@@ -131,7 +137,7 @@ def fit_single_cell(adata, experiment,
     if categorical_vars is None:
         recons, (mu, var), samples = model(x)
     else:
-        y = pd.get_dummies(adata.obs, columns=categorical_vars).values.squeeze().astype('float32')
+        y = ds.get_conditional_vectors()
         y = torch.from_numpy(y).to(device)
         
         recons, (mu, var), samples = model(x=x, y=y)
