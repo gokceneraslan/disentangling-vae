@@ -212,5 +212,7 @@ class CondDecoderFC(nn.Module):
             x = torch.sigmoid(x)
         elif self.output_activation == 'relu':
             x = torch.relu(x)
+        elif self.output_activation == 'softplus':
+            x = torch.nn.functional.softplus(x)
 
         return x

@@ -36,13 +36,27 @@ LOG_LEVELS = list(logging._levelToName.values())
 
 class AnndataDataset(DisentangledDataset):
     files = {"train": "."}
-    def __init__(self, adata, categorical_vars=None, scale_factor=1.0, **kwargs):
+
+    def __init__(self, adata, categorical_vars=None, unwanted_vars=None, scale_factor=1.0, **kwargs):
         super().__init__(root='.', **kwargs)
         self.adata = adata
         self.imgs = self.adata
+        
+        if categorical_vars is not None:
+            assert np.all(pd.Series(categorical_vars).isin(adata.obs.columns))
+            assert np.all([adata.obs[x].dtype.name == 'category' for x in categorical_vars])
+            
+            if unwanted_vars is None:
+                self.mask = np.ones(len(categorical_vars))
+            else:
+                self.mask = 1.0 - np.isin(categorical_vars, unwanted_vars)
+        else:
+            self.mask = None
+                
+        self.unwanted_vars = unwanted_vars
         self.categorical_vars = categorical_vars
         self.scale_factor = scale_factor
-        self.y = self.get_conditional_vectors()
+        self.y = self.get_conditional_vectors(mask=False)
 
     def download(self):
         pass
@@ -51,16 +65,22 @@ class AnndataDataset(DisentangledDataset):
         batch = self.adata.X[idx]
         return batch, 0 if self.categorical_vars is None else self.y[idx]
     
-    def get_conditional_vectors(self):
-        if self.categorical_vars is not None:
-            return pd.get_dummies(self.adata.obs[self.categorical_vars], 
-                                  columns=self.categorical_vars).values.squeeze().astype('float32') * self.scale_factor
-        else:
+    def get_conditional_vectors(self, mask=False):
+        if self.categorical_vars is None:
             return None
+        
+        if mask:
+            assert self.mask is not None
+            assert len(self.mask) == len(self.categorical_vars)
+            mat = np.hstack([pd.get_dummies(self.adata.obs[x]).values*m for x, m in zip(self.categorical_vars, self.mask)])
+        else:
+            mat = np.hstack([pd.get_dummies(self.adata.obs[x]).values for x in self.categorical_vars])
 
+        return mat.squeeze().astype('float32') * self.scale_factor
 
 def fit_single_cell(adata, experiment,
                 categorical_vars=None,
+                unwanted_vars=None,
                 scale_factor=1.0,
 
                 # Training options
@@ -70,6 +90,7 @@ def fit_single_cell(adata, experiment,
                 checkpoint_every = 10,
 
                 # Model Options
+                output_activation = 'linear',
                 latent_dim = 20,
                 num_layers = 1,
                 rec_dist = "gaussian",
@@ -92,7 +113,7 @@ def fit_single_cell(adata, experiment,
     
     if sp.issparse(adata.X): adata.X = adata.X.A
 
-    ds = AnndataDataset(adata, categorical_vars=categorical_vars, scale_factor=scale_factor)
+    ds = AnndataDataset(adata, categorical_vars=categorical_vars, unwanted_vars=unwanted_vars, scale_factor=scale_factor)
     train_loader = DataLoader(ds,
                               batch_size=batch_size,
                               shuffle=shuffle,
@@ -102,10 +123,10 @@ def fit_single_cell(adata, experiment,
     logger.info("Train VAE with {} samples".format(len(train_loader.dataset)))
 
     if categorical_vars is None:
-        model = VAEFC(adata.n_vars, latent_dim=latent_dim, num_layers=num_layers) 
+        model = VAEFC(adata.n_vars, latent_dim=latent_dim, num_layers=num_layers, output_activation=output_activation) 
     else:
         cond_dim = sum([len(adata.obs[x].cat.categories) for x in categorical_vars])
-        model = CondVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, num_layers=num_layers)
+        model = CondVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, num_layers=num_layers, output_activation=output_activation)
 
     device = 'cuda' if cuda else 'cpu'
     model = model.to(device)
@@ -132,6 +153,7 @@ def fit_single_cell(adata, experiment,
     trainer(train_loader,
             epochs=epochs,
             checkpoint_every=checkpoint_every)
+    model.eval()
 
     x = torch.from_numpy(adata.X).to(device)
     if categorical_vars is None:
@@ -146,6 +168,13 @@ def fit_single_cell(adata, experiment,
     adata.obsm['X_vae_mean'] = mu.cpu().detach().numpy()
     adata.obsm['X_vae_var'] = var.cpu().detach().numpy()
     adata.layers['VAE'] = recons.cpu().detach().numpy()
+    
+    if categorical_vars is not None and unwanted_vars is not None:
+        y = ds.get_conditional_vectors(mask=True)
+        y = torch.from_numpy(y).to(device)
+        
+        recons = model.decoder(z=samples, y=y)
+        adata.layers['VAE_corrected'] = recons.cpu().detach().numpy()
     
     adata.write(exp_dir + '/adata.h5ad')
     
