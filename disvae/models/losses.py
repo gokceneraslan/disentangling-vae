@@ -132,15 +132,16 @@ class BetaHLoss(BaseLoss):
         a constrained variational framework." (2016).
     """
 
-    def __init__(self, beta=4, **kwargs):
+    def __init__(self, beta=4, recons_coef=1.0, **kwargs):
         super().__init__(**kwargs)
         self.beta = beta
+        self.recons_coef = recons_coef
 
     def __call__(self, data, recon_data, latent_dist, is_train, storer, **kwargs):
         storer = self._pre_call(is_train, storer)
 
         rec_loss = _reconstruction_loss(data, recon_data,
-                                        storer=storer,
+                                        storer=storer, coef=self.recons_coef,
                                         distribution=self.rec_dist)
         kl_loss = _kl_normal_loss(*latent_dist, storer)
         anneal_reg = (linear_annealing(0, 1, self.n_train_steps, self.steps_anneal)
@@ -177,9 +178,10 @@ class BetaBLoss(BaseLoss):
         $\beta$-VAE." arXiv preprint arXiv:1804.03599 (2018).
     """
 
-    def __init__(self, C_init=0., C_fin=20., gamma=100., **kwargs):
+    def __init__(self, C_init=0., C_fin=20., gamma=100., recons_coef=1.0, **kwargs):
         super().__init__(**kwargs)
         self.gamma = gamma
+        self.recons_coef = recons_coef
         self.C_init = C_init
         self.C_fin = C_fin
 
@@ -187,7 +189,7 @@ class BetaBLoss(BaseLoss):
         storer = self._pre_call(is_train, storer)
 
         rec_loss = _reconstruction_loss(data, recon_data,
-                                        storer=storer,
+                                        storer=storer, coef=self.recons_coef,
                                         distribution=self.rec_dist)
         kl_loss = _kl_normal_loss(*latent_dist, storer)
 
@@ -229,11 +231,13 @@ class FactorKLoss(BaseLoss):
     def __init__(self, device,
                  gamma=10.,
                  disc_kwargs={},
+                 recons_coef=1.0,
                  optim_kwargs=dict(lr=5e-5, betas=(0.5, 0.9)),
                  **kwargs):
         super().__init__(**kwargs)
         self.gamma = gamma
         self.device = device
+        self.recons_coef = recons_coef
         self.discriminator = Discriminator(**disc_kwargs).to(self.device)
         self.optimizer_d = optim.Adam(self.discriminator.parameters(), **optim_kwargs)
 
@@ -253,7 +257,7 @@ class FactorKLoss(BaseLoss):
         # Factor VAE Loss
         recon_batch, latent_dist, latent_sample1 = model(data1)
         rec_loss = _reconstruction_loss(data1, recon_batch,
-                                        storer=storer,
+                                        storer=storer, coef=self.recons_coef,
                                         distribution=self.rec_dist)
 
         kl_loss = _kl_normal_loss(*latent_dist, storer)
@@ -343,12 +347,13 @@ class BtcvaeLoss(BaseLoss):
        autoencoders." Advances in Neural Information Processing Systems. 2018.
     """
 
-    def __init__(self, n_data, alpha=1., beta=6., gamma=1., is_mss=True, **kwargs):
+    def __init__(self, n_data, alpha=1., beta=6., gamma=1., is_mss=True, recons_coef=1.0, **kwargs):
         super().__init__(**kwargs)
         self.n_data = n_data
         self.beta = beta
         self.alpha = alpha
         self.gamma = gamma
+        self.recons_coef = recons_coef
         self.is_mss = is_mss  # minibatch stratified sampling
 
     def __call__(self, data, recon_batch, latent_dist, is_train, storer,
@@ -357,7 +362,7 @@ class BtcvaeLoss(BaseLoss):
         batch_size, latent_dim = latent_sample.shape
 
         rec_loss = _reconstruction_loss(data, recon_batch,
-                                        storer=storer,
+                                        storer=storer, coef=self.recons_coef,
                                         distribution=self.rec_dist)
         log_pz, log_qz, log_prod_qzi, log_q_zCx = _get_log_pz_qz_prodzi_qzCx(latent_sample,
                                                                              latent_dist,
@@ -389,7 +394,7 @@ class BtcvaeLoss(BaseLoss):
         return loss
 
 
-def _reconstruction_loss(data, recon_data, distribution="bernoulli", storer=None):
+def _reconstruction_loss(data, recon_data, distribution="bernoulli", coef=1.0, storer=None):
     """
     Calculates the per image reconstruction loss for a batch of data. I.e. negative
     log likelihood.
@@ -439,6 +444,7 @@ def _reconstruction_loss(data, recon_data, distribution="bernoulli", storer=None
         assert distribution not in RECON_DIST
         raise ValueError("Unkown distribution: {}".format(distribution))
 
+    loss *= coef
     loss = loss / batch_size
 
     if storer is not None:
