@@ -79,9 +79,10 @@ class AnndataDataset(DisentangledDataset):
         return mat.squeeze().astype('float32') * self.scale_factor
 
 def fit_single_cell(adata, experiment,
-                categorical_vars=None,
-                unwanted_vars=None,
-                scale_factor=1.0,
+                categorical_vars = None,
+                unwanted_vars = None,
+                pretrained_model = False,
+                scale_factor = 1.0,
 
                 # Training options
                 epochs = 100,
@@ -91,9 +92,11 @@ def fit_single_cell(adata, experiment,
 
                 # Model Options
                 output_activation = 'linear',
+                hidden_dim = 256,
                 latent_dim = 20,
                 num_layers = 1,
                 rec_dist = "gaussian",
+                rec_coef = 1.0,
                 reg_anneal = 10000,
  
                 progress_bar = True,
@@ -123,10 +126,12 @@ def fit_single_cell(adata, experiment,
     logger.info("Train VAE with {} samples".format(len(train_loader.dataset)))
 
     if categorical_vars is None:
-        model = VAEFC(adata.n_vars, latent_dim=latent_dim, num_layers=num_layers, output_activation=output_activation) 
+        model = VAEFC(adata.n_vars, latent_dim=latent_dim, num_layers=num_layers, 
+                      output_activation=output_activation, hidden_dim=hidden_dim) 
     else:
         cond_dim = sum([len(adata.obs[x].cat.categories) for x in categorical_vars])
-        model = CondVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, num_layers=num_layers, output_activation=output_activation)
+        model = CondVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, 
+                          num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)
 
     device = 'cuda' if cuda else 'cpu'
     model = model.to(device)
@@ -135,25 +140,34 @@ def fit_single_cell(adata, experiment,
     optimizer = optim.Adam(model.parameters(), lr=lr)
     model = model.to(device)  # make sure trainer and viz on same device
 
-    loss_f = get_loss_f(loss_name='btcvae',
+    loss_f = get_loss_f(loss_name='btcvae', recons_coef=rec_coef,
                         n_data=len(train_loader.dataset),
                         device=device,
                         **default_config)
 
     exp_dir = os.path.join(RES_DIR, experiment)
-    create_safe_directory(exp_dir, logger=logger)
 
-    trainer = Trainer(model, optimizer, loss_f,
-                      conditional=(categorical_vars is not None),
-                      device=device,
-                      logger=logger,
-                      save_dir=exp_dir,
-                      is_progress_bar=progress_bar)
+    if not pretrained_model:
+        create_safe_directory(exp_dir, logger=logger)
+        trainer = Trainer(model, optimizer, loss_f,
+                          conditional=(categorical_vars is not None),
+                          device=device,
+                          logger=logger,
+                          save_dir=exp_dir,
+                          is_progress_bar=progress_bar)
 
-    trainer(train_loader,
-            epochs=epochs,
-            checkpoint_every=checkpoint_every)
+        trainer(train_loader,
+                epochs=epochs,
+                checkpoint_every=checkpoint_every)
+        
+    else:
+        trainer = None
+        load_model(exp_dir)
+        
     model.eval()
+    
+    device = 'cpu'
+    model = model.to(device)
 
     x = torch.from_numpy(adata.X).to(device)
     if categorical_vars is None:
@@ -173,7 +187,7 @@ def fit_single_cell(adata, experiment,
         y = ds.get_conditional_vectors(mask=True)
         y = torch.from_numpy(y).to(device)
         
-        recons = model.decoder(z=samples, y=y)
+        recons = model.decoder(z=mu, y=y)
         adata.layers['VAE_corrected'] = recons.cpu().detach().numpy()
     
     adata.write(exp_dir + '/adata.h5ad')
