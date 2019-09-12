@@ -63,7 +63,7 @@ class AnndataDataset(DisentangledDataset):
 
     def __getitem__(self, idx):
         batch = self.adata.X[idx]
-        return batch, 0 if self.categorical_vars is None else self.y[idx]
+        return batch, (0 if self.categorical_vars is None else self.y[idx])
     
     def get_conditional_vectors(self, mask=False):
         if self.categorical_vars is None:
@@ -159,41 +159,58 @@ def fit_single_cell(adata, experiment,
         trainer(train_loader,
                 epochs=epochs,
                 checkpoint_every=checkpoint_every)
-        
     else:
         trainer = None
-        load_model(exp_dir)
-        
-    model.eval()
-    
-    device = 'cpu'
-    model = model.to(device)
+        model = load_model(exp_dir)
 
-    x = torch.from_numpy(adata.X).to(device)
-    if categorical_vars is None:
-        recons, (mu, var), samples = model(x)
-    else:
-        y = ds.get_conditional_vectors()
-        y = torch.from_numpy(y).to(device)
-        
-        recons, (mu, var), samples = model(x=x, y=y)
-        
-    adata.obsm['X_vae_samples'] = samples.cpu().detach().numpy()
-    adata.obsm['X_vae_mean'] = mu.cpu().detach().numpy()
-    adata.obsm['X_vae_var'] = var.cpu().detach().numpy()
-    adata.layers['VAE'] = recons.cpu().detach().numpy()
-    
-    if categorical_vars is not None and unwanted_vars is not None:
-        y = ds.get_conditional_vectors(mask=True)
-        y = torch.from_numpy(y).to(device)
-        
-        recons = model.decoder(z=mu, y=y)
-        adata.layers['VAE_corrected'] = recons.cpu().detach().numpy()
-    
+    adata = forward_pass_in_batch(ds, model, get_corrected=(categorical_vars is not None))
     adata.write(exp_dir + '/adata.h5ad')
     
     return adata, model, trainer, train_loader
 
+
+def forward_pass_in_batch(dataset, model, batch_size=2048, device='cpu', get_corrected=False):
+    
+    trainloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+
+    recons_list = []
+    mu_list  = []
+    var_list = []
+    samples_list = []
+    
+    model.eval()
+    model = model.to(device)
+
+    for i, (x, y) in enumerate(trainloader):
+        if dataset.categorical_vars is not None:
+            recons, (mu, var), samples = model.forward(x.to(device), y.to(device))
+        else:
+            recons, (mu, var), samples = model.forward(x.to(device))
+
+        recons_list.append(recons.cpu().detach().numpy())
+        mu_list.append(mu.cpu().detach().numpy())
+        var_list.append(var.cpu().detach().numpy())
+        samples_list.append(samples.cpu().detach().numpy())
+
+    recons_list = np.vstack(recons_list)
+    mu_list = np.vstack(mu_list)
+    var_list = np.vstack(var_list)
+    samples_list = np.vstack(samples_list)
+    
+    dataset.adata.obsm['X_vae_samples'] = samples_list
+    dataset.adata.obsm['X_vae_mean'] = mu_list
+    dataset.adata.obsm['X_vae_var'] = var_list
+    dataset.adata.layers['VAE'] = recons_list
+    
+    if get_corrected:
+        y = dataset.get_conditional_vectors(mask=True)
+        y = torch.from_numpy(y).to(device)
+        
+        recons = model.decoder(z=torch.from_numpy(mu_list).to(device), y=y)
+        dataset.adata.layers['VAE_corrected'] = recons.cpu().detach().numpy()
+        
+    return dataset.adata
+    
 
 def plot_correlation(mat, **kwargs):
     cmap = sns.color_palette("RdBu_r", 50)
