@@ -29,7 +29,7 @@ class EncoderConv2D(nn.Module):
             [1] Burgess, Christopher P., et al. "Understanding disentangling in
             $\beta$-VAE." arXiv preprint arXiv:1804.03599 (2018).
         """
-        super(EncoderConv2D, self).__init__()
+        super().__init__()
 
         # Layer parameters
         self.hidden_channels = hidden_channels
@@ -88,7 +88,7 @@ class EncoderConv2D(nn.Module):
 
 class EncoderFC(nn.Module):
     def __init__(self, input_dim, latent_dim=10, hidden_dim=256, num_layers=1):
-        super(EncoderFC, self).__init__()
+        super().__init__()
 
         # Layer parameters
         self.hidden_dim = hidden_dim
@@ -112,5 +112,89 @@ class EncoderFC(nn.Module):
         # Log std-dev in paper (bear in mind)
         mu_logvar = self.mu_logvar_gen(x)
         mu, logvar = mu_logvar.view(-1, self.latent_dim, 2).unbind(-1)
+
+        return mu, logvar
+
+    
+class CondEmbedEncoderFC(nn.Module):
+    def __init__(self, input_dim, cond_dim, cond_embed_dim=2, latent_dim=10, hidden_dim=256, num_layers=1):
+        super().__init__()
+
+        # Layer parameters
+        self.hidden_dim = hidden_dim
+        self.cond_dim = cond_dim
+        self.cond_embed_dim = cond_embed_dim
+        self.latent_dim = latent_dim
+        self.input_dim = input_dim
+        self.num_layers = num_layers
+        self.fc_layers = nn.ModuleList()
+
+        # Fully connected layers
+        for i in range(num_layers):
+            self.fc_layers.append(nn.Linear(self.input_dim if i == 0 else self.hidden_dim, self.hidden_dim))
+
+        # Fully connected layers for mean and variance
+        self.mu_logvar_gen = nn.Linear(self.hidden_dim, self.latent_dim * 2)
+
+        self.cond_embed_mean_layer = nn.Linear(self.cond_dim, self.cond_embed_dim)
+        self.cond_embed_var_layer = nn.Linear(self.cond_dim, self.cond_embed_dim)
+        
+        self.cond_embed_mean_layer.bias.data.fill_(5.)
+        self.cond_embed_var_layer.bias.data.fill_(-5.)
+
+    def forward(self, *, x, y):
+        for layer in self.fc_layers:
+            x = torch.relu(layer(x))
+
+        # Fully connected layer for log variance and mean
+        # Log std-dev in paper (bear in mind)
+        mu_logvar = self.mu_logvar_gen(x)
+        mu, logvar = mu_logvar.view(-1, self.latent_dim, 2).unbind(-1)
+        
+        mu_emb = self.cond_embed_mean_layer(y)
+        logvar_emb = self.cond_embed_var_layer(y)
+
+        mu = torch.cat([mu, mu_emb], -1)
+        logvar = torch.cat([logvar, logvar_emb], -1)
+
+        return mu, logvar
+
+    
+class CondMaskEncoderFC(nn.Module):
+    def __init__(self, input_dim, cond_dim, latent_dim=10, hidden_dim=256, num_layers=1):
+        super().__init__()
+
+        # Layer parameters
+        self.hidden_dim = hidden_dim
+        self.cond_dim = cond_dim
+        self.latent_dim = latent_dim
+        self.input_dim = input_dim
+        self.num_layers = num_layers
+        self.fc_layers = nn.ModuleList()
+
+        # Fully connected layers
+        for i in range(num_layers):
+            self.fc_layers.append(nn.Linear(self.input_dim if i == 0 else self.hidden_dim, self.hidden_dim))
+
+        # Fully connected layers for mean and variance
+        self.mu_logvar_gen = nn.Linear(self.hidden_dim, self.latent_dim * 2)
+
+        self.cond_embed_mean_layer = nn.Linear(self.hidden_dim, self.cond_dim)
+        self.cond_embed_var_layer = nn.Linear(self.hidden_dim, self.cond_dim)
+        
+    def forward(self, *, x, y):
+        for layer in self.fc_layers:
+            x = torch.relu(layer(x))
+
+        # Fully connected layer for log variance and mean
+        # Log std-dev in paper (bear in mind)
+        mu_logvar = self.mu_logvar_gen(x)
+        mu, logvar = mu_logvar.view(-1, self.latent_dim, 2).unbind(-1)
+        
+        mu_emb     = torch.mul(self.cond_embed_mean_layer(x), y)
+        logvar_emb = self.cond_embed_var_layer(x)
+
+        mu = torch.cat([mu, mu_emb], -1)
+        logvar = torch.cat([logvar, logvar_emb], -1)
 
         return mu, logvar

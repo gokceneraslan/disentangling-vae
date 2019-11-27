@@ -9,7 +9,7 @@ from torch import nn, optim
 from torch.nn import functional as F
 
 from disvae.utils.initialization import weights_init
-from .encoders import EncoderConv2D, EncoderFC
+from .encoders import EncoderConv2D, EncoderFC, CondEmbedEncoderFC, CondMaskEncoderFC
 from .decoders import DecoderConv2D, CondDecoderConv2D, DecoderFC, CondDecoderFC
 
 
@@ -134,7 +134,69 @@ class CondVAE(ABC):
         latent_dist = self.encoder(x)
         latent_sample = self.reparameterize(*latent_dist)
         return latent_sample
+    
+    
+class CondEmbedVAE(ABC):
+    @abstractproperty
+    def encoder(self):
+        pass
 
+    @abstractproperty
+    def decoder(self):
+        pass    
+        
+    def reparameterize(self, mean, logvar):
+        """
+        Samples from a normal distribution using the reparameterization trick.
+
+        Parameters
+        ----------
+        mean : torch.Tensor
+            Mean of the normal distribution. Shape (batch_size, latent_dim)
+
+        logvar : torch.Tensor
+            Diagonal log variance of the normal distribution. Shape (batch_size,
+            latent_dim)
+        """
+        if self.training:
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            return mean + std * eps
+        else:
+            # Reconstruction mode
+            return mean
+
+    def forward(self, x, y):
+        """
+        Forward pass of model.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Batch of data. Shape (batch_size, n_chan, height, width)
+        y : torch.Tensor
+            Batch of data on which x is conditioned on
+        """
+        latent_dist = self.encoder(x=x, y=y)
+        latent_sample = self.reparameterize(*latent_dist)
+        reconstruct = self.decoder(latent_sample)
+        return reconstruct, latent_dist, latent_sample
+
+    def reset_parameters(self):
+        self.apply(weights_init)
+
+    def sample_latent(self, *, x, y):
+        """
+        Returns a sample from the latent distribution.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Batch of data. Shape (batch_size, n_chan, height, width)
+        """
+        latent_dist = self.encoder(x=x, y=y)
+        latent_sample = self.reparameterize(*latent_dist)
+        return latent_sample
 
 class VAEConv2D(VAE, nn.Module):
     def __init__(self, img_size, latent_dim=10, kernel_size=4, num_layers=6, stride=2, padding=1, hidden_dim=256, hidden_channels=32):
@@ -294,6 +356,72 @@ class CondVAEFC(CondVAE, nn.Module):
         self.reset_parameters()
 
         
+    @property
+    def encoder(self):
+        return self._encoder
+
+    @property
+    def decoder(self):
+        return self._decoder
+    
+
+class CondEmbedVAEFC(CondEmbedVAE, nn.Module):
+    def __init__(self, input_size, cond_dim, cond_embed_dim=2, latent_dim=10, hidden_dim=256, num_layers=1, output_activation='linear'):
+        super().__init__()
+
+        self.model_type = 'FC'
+        self.input_size = input_size
+        self.latent_dim = latent_dim
+        self.hidden_dim = hidden_dim
+        self.cond_dim = cond_dim
+        self.cond_embed_dim = cond_embed_dim
+        
+        self._encoder = CondEmbedEncoderFC(input_size,
+                                           cond_dim=cond_dim,
+                                           cond_embed_dim=cond_embed_dim,
+                                           latent_dim=latent_dim,
+                                           hidden_dim=hidden_dim,
+                                           num_layers=num_layers)
+
+        self._decoder = DecoderFC(input_size,
+                                  latent_dim=latent_dim+cond_embed_dim,
+                                  hidden_dim=hidden_dim,
+                                  num_layers=num_layers,
+                                  output_activation=output_activation)
+        self.reset_parameters()
+
+    @property
+    def encoder(self):
+        return self._encoder
+
+    @property
+    def decoder(self):
+        return self._decoder
+    
+    
+class CondMaskVAEFC(CondEmbedVAE, nn.Module):
+    def __init__(self, input_size, cond_dim, latent_dim=10, hidden_dim=256, num_layers=1, output_activation='linear'):
+        super().__init__()
+
+        self.model_type = 'FC'
+        self.input_size = input_size
+        self.latent_dim = latent_dim
+        self.hidden_dim = hidden_dim
+        self.cond_dim = cond_dim
+        
+        self._encoder = CondMaskEncoderFC(input_size,
+                                           cond_dim=cond_dim,
+                                           latent_dim=latent_dim,
+                                           hidden_dim=hidden_dim,
+                                           num_layers=num_layers)
+
+        self._decoder = DecoderFC(input_size,
+                                  latent_dim=latent_dim+cond_dim,
+                                  hidden_dim=hidden_dim,
+                                  num_layers=num_layers,
+                                  output_activation=output_activation)
+        self.reset_parameters()
+
     @property
     def encoder(self):
         return self._encoder

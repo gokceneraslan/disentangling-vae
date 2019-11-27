@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 
-from disvae import Trainer, Evaluator, VAEFC, CondVAEFC
+from disvae import Trainer, Evaluator, VAEFC, CondVAEFC, CondEmbedVAEFC, CondMaskVAEFC
 from disvae.utils.modelIO import save_model, load_model, load_metadata
 from disvae.models.losses import LOSSES, RECON_DIST, get_loss_f
 from utils.datasets import get_dataloaders, get_img_size, DATASETS
@@ -83,6 +83,9 @@ def fit_single_cell(adata, experiment,
                 unwanted_vars = None,
                 pretrained_model = False,
                 scale_factor = 1.0,
+                use_embedding = False,
+                use_masking = False,
+                cond_embed_dim = 2,
 
                 # Training options
                 epochs = 100,
@@ -130,9 +133,17 @@ def fit_single_cell(adata, experiment,
                       output_activation=output_activation, hidden_dim=hidden_dim) 
     else:
         cond_dim = sum([len(adata.obs[x].cat.categories) for x in categorical_vars])
-        model = CondVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, 
-                          num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)
 
+        if use_masking:
+            model = CondMaskVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim,
+                                   num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)                    
+        elif use_embedding:
+            model = CondEmbedVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, cond_embed_dim=cond_embed_dim,
+                                   num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)       
+        else:
+            model = CondVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, 
+                              num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)
+        
     device = 'cuda' if cuda else 'cpu'
     model = model.to(device)
 
@@ -163,7 +174,7 @@ def fit_single_cell(adata, experiment,
         trainer = None
         model = load_model(exp_dir)
 
-    adata = forward_pass_in_batch(ds, model, get_corrected=(categorical_vars is not None))
+    adata = forward_pass_in_batch(ds, model, get_corrected=(unwanted_vars is not None))
     adata.write(exp_dir + '/adata.h5ad')
     
     return adata, model, trainer, train_loader
