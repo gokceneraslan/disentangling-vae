@@ -79,41 +79,42 @@ class AnndataDataset(DisentangledDataset):
         return mat.squeeze().astype('float32') * self.scale_factor
 
 def fit_single_cell(adata, experiment,
-                categorical_vars = None,
-                unwanted_vars = None,
-                pretrained_model = False,
-                scale_factor = 1.0,
-                use_embedding = False,
-                use_masking = False,
-                cond_embed_dim = 2,
+                    categorical_vars = None,
+                    unwanted_vars = None,
+                    pretrained_model = False,
+                    scale_factor = 1.0,
+                    use_embedding = False,
+                    use_masking = False,
+                    cond_embed_dim = 2,
+                    concat_all_dec_layers=False,
 
-                # Training options
-                epochs = 100,
-                batch_size = 128,
-                lr = 5e-4,
-                checkpoint_every = 10,
+                    # Training options
+                    epochs = 100,
+                    batch_size = 128,
+                    lr = 5e-4,
+                    checkpoint_every = 10,
 
-                # Model Options
-                output_activation = 'linear',
-                hidden_dim = 256,
-                latent_dim = 20,
-                num_layers = 1,
-                rec_dist = "gaussian",
-                rec_coef = 1.0,
-                reg_anneal = 10000,
- 
-                progress_bar = True,
-                cuda = True,
-                seed = 1234,
-                log_level = "info",
-                shuffle=True,
-                pin_memory=True,
+                    # Model Options
+                    output_activation = 'linear',
+                    hidden_dim = 256,
+                    latent_dim = 20,
+                    num_layers = 1,
+                    rec_dist = "gaussian",
+                    rec_coef = 1.0,
+                    reg_anneal = 10000,
 
-                # btcvae Options
-                btcvae_A = 1,
-                btcvae_G = 1,
-                btcvae_B = 6,
-                eval_batchsize = 1000):
+                    progress_bar = True,
+                    cuda = True,
+                    seed = 1234,
+                    log_level = "info",
+                    shuffle=True,
+                    pin_memory=True,
+
+                    # btcvae Options
+                    btcvae_A = 1,
+                    btcvae_G = 1,
+                    btcvae_B = 6,
+                    eval_batchsize = 1000):
     
     default_config = locals()
     
@@ -142,8 +143,8 @@ def fit_single_cell(adata, experiment,
                                    num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)       
         else:
             model = CondVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, 
-                              num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)
-        
+                              num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim, 
+                              concat_all_dec_layers=concat_all_dec_layers)
     device = 'cuda' if cuda else 'cpu'
     model = model.to(device)
 
@@ -189,7 +190,7 @@ def forward_pass_in_batch(dataset, model, batch_size=2048, device='cpu', get_cor
     var_list = []
     samples_list = []
     
-    model.eval()
+    model.train()
     model = model.to(device)
 
     for i, (x, y) in enumerate(trainloader):

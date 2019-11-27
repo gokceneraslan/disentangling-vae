@@ -186,10 +186,12 @@ class DecoderFC(nn.Module):
     
     
 class CondDecoderFC(nn.Module):
-    def __init__(self, output_dim, cond_dim, latent_dim=10, hidden_dim=256, num_layers=1, output_activation='linear'):
+    def __init__(self, output_dim, cond_dim, latent_dim=10, hidden_dim=256, num_layers=1, output_activation='linear', concat_all_layers=False):
         super().__init__()
 
         self.output_activation = output_activation
+        self.concat_all_layers = concat_all_layers
+
         # Layer parameters
         self.hidden_dim = hidden_dim
         self.cond_dim = cond_dim
@@ -197,11 +199,14 @@ class CondDecoderFC(nn.Module):
         self.num_layers = num_layers
         self.fc_layers = nn.ModuleList()
 
+        extra_hidden = 0 if not self.concat_all_layers else cond_dim
+        
         # Fully connected layers
         for i in range(num_layers):
-            self.fc_layers.append(nn.Linear(latent_dim + cond_dim if i == 0 else hidden_dim, hidden_dim))
+            self.fc_layers.append(nn.Linear(latent_dim + cond_dim if i == 0 else (hidden_dim + extra_hidden), 
+                                            hidden_dim))
 
-        self.output_layer = nn.Linear(hidden_dim, self.output_dim)
+        self.output_layer = nn.Linear(hidden_dim + extra_hidden, self.output_dim)
 
     def forward(self, *, z, y):
         x = torch.cat([z, y], dim=-1)
@@ -209,6 +214,8 @@ class CondDecoderFC(nn.Module):
         # Fully connected layers with ReLu activations
         for layer in self.fc_layers:
             x = torch.relu(layer(x))
+            if self.concat_all_layers:
+                x = torch.cat([x, y], dim=-1)
         
         x = self.output_layer(x)
 

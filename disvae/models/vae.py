@@ -333,7 +333,7 @@ class VAEFC(VAE, nn.Module):
     
 
 class CondVAEFC(CondVAE, nn.Module):
-    def __init__(self, input_size, cond_dim, latent_dim=10, hidden_dim=256, num_layers=1, output_activation='linear'):
+    def __init__(self, input_size, cond_dim, latent_dim=10, hidden_dim=256, num_layers=1, output_activation='linear', concat_all_dec_layers=False):
         super().__init__()
 
         self.model_type = 'FC'
@@ -352,7 +352,8 @@ class CondVAEFC(CondVAE, nn.Module):
                                   latent_dim=latent_dim,
                                   hidden_dim=hidden_dim,
                                   num_layers=num_layers,
-                                  output_activation=output_activation)
+                                  output_activation=output_activation,
+                                  concat_all_layers=concat_all_dec_layers)
         self.reset_parameters()
 
         
