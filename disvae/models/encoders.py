@@ -139,8 +139,8 @@ class CondEmbedEncoderFC(nn.Module):
         self.cond_embed_mean_layer = nn.Linear(self.cond_dim, self.cond_embed_dim)
         self.cond_embed_var_layer = nn.Linear(self.cond_dim, self.cond_embed_dim)
         
-        self.cond_embed_mean_layer.bias.data.fill_(5.)
-        self.cond_embed_var_layer.bias.data.fill_(-5.)
+        #self.cond_embed_mean_layer.bias.data.fill_(5.)
+        #self.cond_embed_var_layer.bias.data.fill_(-5.)
 
     def forward(self, *, x, y):
         for layer in self.fc_layers:

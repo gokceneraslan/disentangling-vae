@@ -37,7 +37,7 @@ LOG_LEVELS = list(logging._levelToName.values())
 class AnndataDataset(DisentangledDataset):
     files = {"train": "."}
 
-    def __init__(self, adata, categorical_vars=None, unwanted_vars=None, scale_factor=1.0, **kwargs):
+    def __init__(self, adata, *, categorical_vars=None, continuous_vars=None, unwanted_vars=None, scale_factor=1.0, **kwargs):
         super().__init__(root='.', **kwargs)
         self.adata = adata
         self.imgs = self.adata
@@ -52,9 +52,15 @@ class AnndataDataset(DisentangledDataset):
                 self.mask = 1.0 - np.isin(categorical_vars, unwanted_vars)
         else:
             self.mask = None
-                
+
+        if continuous_vars is not None:
+            assert np.all(pd.Series(continuous_vars).isin(adata.obs.columns))
+            
         self.unwanted_vars = unwanted_vars
         self.categorical_vars = categorical_vars
+        self.continuous_vars = continuous_vars
+        self.variable_index = ([] if continuous_vars is None else continuous_vars) + ([] if categorical_vars is None else categorical_vars)
+
         self.scale_factor = scale_factor
         self.y = self.get_conditional_vectors(mask=False)
 
@@ -63,23 +69,32 @@ class AnndataDataset(DisentangledDataset):
 
     def __getitem__(self, idx):
         batch = self.adata.X[idx]
-        return batch, (0 if self.categorical_vars is None else self.y[idx])
+        return batch, (0 if self.y is None else self.y[idx])
     
     def get_conditional_vectors(self, mask=False):
-        if self.categorical_vars is None:
+        if self.categorical_vars is None and self.continuous_vars is None:
             return None
         
-        if mask:
-            assert self.mask is not None
-            assert len(self.mask) == len(self.categorical_vars)
-            mat = np.hstack([pd.get_dummies(self.adata.obs[x]).values*m for x, m in zip(self.categorical_vars, self.mask)])
-        else:
-            mat = np.hstack([pd.get_dummies(self.adata.obs[x]).values for x in self.categorical_vars])
-
-        return mat.squeeze().astype('float32') * self.scale_factor
+        mat = []
+       
+        if self.continuous_vars is not None:
+            mat.append(self.adata.obs[self.continuous_vars].values)
+        
+        if self.categorical_vars is not None:
+            if mask:
+                assert self.mask is not None
+                assert len(self.mask) == len(self.categorical_vars)
+                m = np.hstack([pd.get_dummies(self.adata.obs[x]).values*m for x, m in zip(self.categorical_vars, self.mask)])
+            else:
+                m = np.hstack([pd.get_dummies(self.adata.obs[x]).values for x in self.categorical_vars])
+                
+            mat.append(m)
+            
+        return np.hstack(mat).squeeze().astype('float32') * self.scale_factor
 
 def fit_single_cell(adata, experiment,
                     categorical_vars = None,
+                    continuous_vars = None,
                     unwanted_vars = None,
                     pretrained_model = False,
                     scale_factor = 1.0,
@@ -120,24 +135,35 @@ def fit_single_cell(adata, experiment,
     
     if sp.issparse(adata.X): adata.X = adata.X.A
 
-    ds = AnndataDataset(adata, categorical_vars=categorical_vars, unwanted_vars=unwanted_vars, scale_factor=scale_factor)
+    ds = AnndataDataset(adata, 
+                        categorical_vars=categorical_vars, 
+                        continuous_vars=continuous_vars,
+                        unwanted_vars=unwanted_vars,
+                        scale_factor=scale_factor)
+    
     train_loader = DataLoader(ds,
                               batch_size=batch_size,
                               shuffle=shuffle,
+                              num_workers=16,
                               pin_memory=pin_memory)
 
     logger = logging.getLogger('vae')
     logger.info("Train VAE with {} samples".format(len(train_loader.dataset)))
 
-    if categorical_vars is None:
+    if categorical_vars is None and continuous_vars is None:
         model = VAEFC(adata.n_vars, latent_dim=latent_dim, num_layers=num_layers, 
-                      output_activation=output_activation, hidden_dim=hidden_dim) 
+                      output_activation=output_activation, hidden_dim=hidden_dim)
     else:
-        cond_dim = sum([len(adata.obs[x].cat.categories) for x in categorical_vars])
+        cond_dim = 0
+        if categorical_vars:
+            cond_dim += sum([len(adata.obs[x].cat.categories) for x in categorical_vars])
+        if continuous_vars:
+            cond_dim += len(continuous_vars)
 
         if use_masking:
             model = CondMaskVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim,
-                                   num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)                    
+                                  num_layers=num_layers, output_activation=output_activation, 
+                                  hidden_dim=hidden_dim)                    
         elif use_embedding:
             model = CondEmbedVAEFC(adata.n_vars, latent_dim=latent_dim, cond_dim=cond_dim, cond_embed_dim=cond_embed_dim,
                                    num_layers=num_layers, output_activation=output_activation, hidden_dim=hidden_dim)       
@@ -174,14 +200,15 @@ def fit_single_cell(adata, experiment,
     else:
         trainer = None
         model = load_model(exp_dir)
-
+        #model.decoder.concat_all_layers = False
+    
     adata = forward_pass_in_batch(ds, model, get_corrected=(unwanted_vars is not None))
     adata.write(exp_dir + '/adata.h5ad')
     
     return adata, model, trainer, train_loader
 
 
-def forward_pass_in_batch(dataset, model, batch_size=2048, device='cpu', get_corrected=False):
+def forward_pass_in_batch(dataset, model, batch_size=4096, device='cpu', get_corrected=False):
     
     trainloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
