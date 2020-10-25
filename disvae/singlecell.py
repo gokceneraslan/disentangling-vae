@@ -16,15 +16,14 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 
-from disvae import Trainer, Evaluator, VAEFC, CondVAEFC, CondEmbedVAEFC, CondMaskVAEFC
-from disvae.utils.modelIO import save_model, load_model, load_metadata
-from disvae.models.losses import LOSSES, RECON_DIST, get_loss_f
-from utils.datasets import get_dataloaders, get_img_size, DATASETS
-from utils.helpers import (create_safe_directory, get_device, set_seed, get_n_param,
-                           get_config_section, update_namespace_, FormatterNoDuplicate)
+from . import Trainer, Evaluator, VAEFC, CondVAEFC, CondEmbedVAEFC, CondMaskVAEFC
+from .utils.modelIO import save_model, load_model, load_metadata
+from .models.losses import LOSSES, RECON_DIST, get_loss_f
 
-from utils.datasets import DisentangledDataset
-from utils.visualize import GifTraversalsTraining
+from ..utils.visualize import GifTraversalsTraining
+from ..utils.datasets import get_dataloaders, get_img_size, DATASETS, DisentangledDataset
+from ..utils.helpers import (create_safe_directory, get_device, set_seed, get_n_param,
+                            get_config_section, update_namespace_, FormatterNoDuplicate)
 
 from torch.utils.data import Dataset, DataLoader
 import scipy.sparse as sp

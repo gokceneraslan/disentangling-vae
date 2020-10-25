@@ -2,11 +2,11 @@ import argparse
 import os
 import sys
 
-from utils.helpers import FormatterNoDuplicate, check_bounds, set_seed
-from utils.visualize import Visualizer
-from utils.viz_helpers import get_samples
-from main import RES_DIR
-from disvae.utils.modelIO import load_model, load_metadata
+from .utils.helpers import FormatterNoDuplicate, check_bounds, set_seed
+from .utils.visualize import Visualizer
+from .utils.viz_helpers import get_samples
+from .main import RES_DIR
+from .disvae.utils.modelIO import load_model, load_metadata
 
 
 PLOT_TYPES = ['generate-samples', 'data-samples', 'reconstruct', "traversals",

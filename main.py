@@ -6,12 +6,12 @@ from configparser import ConfigParser
 
 from torch import optim
 
-from disvae import init_specific_model, Trainer, Evaluator
-from disvae.utils.modelIO import save_model, load_model, load_metadata
-from disvae.models.losses import LOSSES, RECON_DIST, get_loss_f
-from disvae.models.vae import MODELS
-from utils.datasets import get_dataloaders, get_img_size, DATASETS
-from utils.helpers import (create_safe_directory, get_device, set_seed, get_n_param,
+from .disvae import init_specific_model, Trainer, Evaluator
+from .disvae.utils.modelIO import save_model, load_model, load_metadata
+from .disvae.models.losses import LOSSES, RECON_DIST, get_loss_f
+from .disvae.models.vae import MODELS
+from .utils.datasets import get_dataloaders, get_img_size, DATASETS
+from .utils.helpers import (create_safe_directory, get_device, set_seed, get_n_param,
                            get_config_section, update_namespace_, FormatterNoDuplicate)
 from utils.visualize import GifTraversalsTraining
 
