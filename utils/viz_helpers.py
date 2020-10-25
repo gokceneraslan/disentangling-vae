@@ -7,8 +7,8 @@ import torch
 import imageio
 
 from torchvision.utils import make_grid
-from utils.datasets import get_dataloaders
-from utils.helpers import set_seed
+from .datasets import get_dataloaders
+from .helpers import set_seed
 
 FPS_GIF = 12
 
